@@ -327,7 +327,7 @@ public:
         }
 
         // Reset-Button
-        if (ImGui::SmallButton(u8"⟳")) {   // ⟳
+        if (ImGui::SmallButton("⟳")) {
             request_reset();
             changed = true;
         }
@@ -337,7 +337,7 @@ public:
         ImGui::SameLine();
 
         // Laden-Button
-        if (ImGui::SmallButton(u8"\U0001f4c2")) {  // 📂
+        if (ImGui::SmallButton("📂")) {
             open_load_dialog_ = true;
         }
         if (ImGui::IsItemHovered())
@@ -346,7 +346,7 @@ public:
         ImGui::SameLine();
 
         // Speichern-Button
-        if (ImGui::SmallButton(u8"\U0001f4be")) {  // 💾
+        if (ImGui::SmallButton("💾")) {
             open_save_dialog_ = true;
         }
         if (ImGui::IsItemHovered())
