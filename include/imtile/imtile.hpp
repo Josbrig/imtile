@@ -21,13 +21,14 @@ namespace imtile {
 // ---------------------------------------------------------------------------
 
 struct Node {
-    enum class Kind { Window, Tabs, HSplit, VSplit };
+    enum class Kind { Window, Tabs, HSplit, VSplit, HSplitPx, VSplitPx };
 
     Kind                     kind;
-    float                    ratio = 0.f;      // für Splits: Anteil des ersten Kindes
-    std::string              name;             // für Window
-    std::vector<std::string> tab_names;        // für Tabs
-    std::vector<Node>        children;         // 2 Einträge für Splits
+    float                    ratio  = 0.f;   // für HSplit/VSplit: Anteil des ersten Kindes
+    float                    pixels = 0.f;   // für HSplitPx/VSplitPx: feste Pixelgröße des ersten Kindes
+    std::string              name;           // für Window
+    std::vector<std::string> tab_names;      // für Tabs
+    std::vector<Node>        children;       // 2 Einträge für Splits
 };
 
 inline Node window(std::string_view name)
@@ -57,6 +58,28 @@ inline Node hsplit(float left_ratio, Node left, Node right)
     return n;
 }
 
+// Pixel-feste Splits: erstes Kind bekommt genau `pixels` px,
+// zweites bekommt den Rest. Auf kleinen Monitoren wird auf min. 5 % komprimiert.
+inline Node hsplit_px(float left_px, Node left, Node right)
+{
+    Node n;
+    n.kind   = Node::Kind::HSplitPx;
+    n.pixels = left_px;
+    n.children.push_back(std::move(left));
+    n.children.push_back(std::move(right));
+    return n;
+}
+
+inline Node vsplit_px(float top_px, Node top, Node bottom)
+{
+    Node n;
+    n.kind   = Node::Kind::VSplitPx;
+    n.pixels = top_px;
+    n.children.push_back(std::move(top));
+    n.children.push_back(std::move(bottom));
+    return n;
+}
+
 inline Node vsplit(float top_ratio, Node top, Node bottom)
 {
     Node n;
@@ -83,7 +106,7 @@ struct Options {
 
 namespace detail {
 
-inline void apply_node(ImGuiID id, const Node& node)
+inline void apply_node(ImGuiID id, const Node& node, ImVec2 avail)
 {
     switch (node.kind) {
     case Node::Kind::Window:
@@ -98,15 +121,40 @@ inline void apply_node(ImGuiID id, const Node& node)
     case Node::Kind::HSplit: {
         ImGuiID left_id = 0, right_id = 0;
         ImGui::DockBuilderSplitNode(id, ImGuiDir_Left, node.ratio, &left_id, &right_id);
-        apply_node(left_id,  node.children[0]);
-        apply_node(right_id, node.children[1]);
+        float left_px = avail.x * node.ratio;
+        apply_node(left_id,  node.children[0], {left_px,            avail.y});
+        apply_node(right_id, node.children[1], {avail.x - left_px,  avail.y});
         break;
     }
     case Node::Kind::VSplit: {
         ImGuiID top_id = 0, bot_id = 0;
         ImGui::DockBuilderSplitNode(id, ImGuiDir_Up, node.ratio, &top_id, &bot_id);
-        apply_node(top_id, node.children[0]);
-        apply_node(bot_id, node.children[1]);
+        float top_px = avail.y * node.ratio;
+        apply_node(top_id, node.children[0], {avail.x, top_px});
+        apply_node(bot_id, node.children[1], {avail.x, avail.y - top_px});
+        break;
+    }
+    case Node::Kind::HSplitPx: {
+        // Pixel-fest: Ratio aus fester Pixelgröße und tatsächlich verfügbarem Platz
+        float ratio = avail.x > 1.f
+            ? std::clamp(node.pixels / avail.x, 0.05f, 0.95f)
+            : 0.5f;
+        ImGuiID left_id = 0, right_id = 0;
+        ImGui::DockBuilderSplitNode(id, ImGuiDir_Left, ratio, &left_id, &right_id);
+        float actual_left = std::min(node.pixels, avail.x * 0.95f);
+        apply_node(left_id,  node.children[0], {actual_left,           avail.y});
+        apply_node(right_id, node.children[1], {avail.x - actual_left, avail.y});
+        break;
+    }
+    case Node::Kind::VSplitPx: {
+        float ratio = avail.y > 1.f
+            ? std::clamp(node.pixels / avail.y, 0.05f, 0.95f)
+            : 0.5f;
+        ImGuiID top_id = 0, bot_id = 0;
+        ImGui::DockBuilderSplitNode(id, ImGuiDir_Up, ratio, &top_id, &bot_id);
+        float actual_top = std::min(node.pixels, avail.y * 0.95f);
+        apply_node(top_id, node.children[0], {avail.x, actual_top});
+        apply_node(bot_id, node.children[1], {avail.x, avail.y - actual_top});
         break;
     }
     }
@@ -162,6 +210,10 @@ inline void collect_ratios(const Node& node, std::vector<float>& out)
 {
     if (node.kind == Node::Kind::HSplit || node.kind == Node::Kind::VSplit) {
         out.push_back(node.ratio);
+        for (const auto& child : node.children)
+            collect_ratios(child, out);
+    } else if (node.kind == Node::Kind::HSplitPx || node.kind == Node::Kind::VSplitPx) {
+        out.push_back(node.pixels);   // als Pixel-Wert gespeichert
         for (const auto& child : node.children)
             collect_ratios(child, out);
     }
@@ -273,7 +325,7 @@ public:
             ImGui::DockBuilderRemoveNode(ds_id);
             ImGui::DockBuilderAddNode(ds_id, ImGuiDockNodeFlags_DockSpace);
             ImGui::DockBuilderSetNodeSize(ds_id, vp->WorkSize);
-            detail::apply_node(ds_id, layout_);
+            detail::apply_node(ds_id, layout_, vp->WorkSize);
             ImGui::DockBuilderFinish(ds_id);
             reset_ = false;
         }
