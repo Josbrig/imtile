@@ -487,6 +487,8 @@ private:
             break;
         case Node::Kind::HSplit:
         case Node::Kind::VSplit:
+        case Node::Kind::HSplitPx:
+        case Node::Kind::VSplitPx:
             for (const auto& child : node.children)
                 collect_window_names_impl(child, out);
             break;
