@@ -1,6 +1,6 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // imtile — Cockpit-Layout-Library für Dear ImGui
-// Copyright (C) 2026 Kai Dieki
+// Copyright (C) 2026 Jörg Simbrig <Josbrig@simbrig.de>
 #pragma once
 
 #include <imgui.h>
